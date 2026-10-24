@@ -1,0 +1,78 @@
+# When the Agent Is the Vulnerability
+## How Google's "Intended Behavior" determination answered a fully demonstrated agent-hijacking and secret-exfiltration class in Gemini Canvas — and why that answer is itself the reason this write-up is published
+
+**Author:** Dr. Alaaeddine Alrimawi, independent security researcher
+**Version:** v4 (2026-10-24) — publication copy
+**Safety envelope:** no operational payloads, no copycat-ready mechanics, no endpoint URLs of the researcher's collection infrastructure, no canary values (redacted shapes only). All exfiltrated values were synthetic test canaries created by the researcher. All testing was performed on the researcher's own accounts, documents, and repositories.
+
+---
+
+## 0. Executive summary
+
+Between August and October 2026 I reported to Google's Vulnerability Reward Program a class of indirect prompt-injection attacks in which a single poisoned document in Google Drive — opened with one innocent user prompt — gave an attacker full steering control of Google's Gemini 3.1 Pro agent (Canvas / Drive). The agent bypassed intent filters, scanned the user's files, planted weaponized artifacts, harvested secret-shaped values (Google, AWS, and Stripe key formats, a 39-character token, and an ownership stamp), and transmitted them out through Google's own fetching infrastructure. The entire chain is captured on video, in agent-signed attestations, and in network records held in four separate systems.
+
+Google's final answer on this report, delivered after four mutually incompatible closure rationales, was **"Won't Fix — Intended Behavior"**, accompanied by a Code-of-Conduct warning to me, an accusation that I was "using AI to speculate about security issues", a threat of program ban if I escalated, and a declaration that no further replies would be read. (A parallel report of mine on Google's Jules agent, submitted the same night, met the same endpoint after its own reopen-reclose cycle; it is outside the scope of this write-up.)
+
+Coordinated disclosure exists so that a vendor can ship a fix before publication. A vendor that formally declares there is nothing to fix has dissolved the very premise of the waiting period. My commitment (quoted verbatim from my submission of Oct 5: *"I will not publish anything before I have coordinated a fix timeline with your team"*) was conditional on such a timeline existing. On Oct 12, 2026 I formally requested public-disclosure approval for both reports. Google answered on Oct 14, procedurally: the decision on what and when to disclose is mine, the date is at my discretion, and they asked to be kept informed of my timeline — while offering no fix engagement and leaving the "Intended" determination standing. That same night I gave formal notice of publication on October 23; the exact publication document and its final window, October 23–26, were delivered to the vendor on October 21. As of publication, none of this has produced any fix engagement. The coordination record now stands at the vendor's written acknowledgment of the delivered document — "Thanks!", October 22 — offered without objection.
+
+## 1. The disclosure record — why this is published now
+
+| Date | Event |
+|---|---|
+| Aug 30, 04:06 | Report (Gemini Canvas, Issue Tracker [554598681]) submitted |
+| (report lifetime) | Closure rationales rotate: **not reproducible → unclear → intended behavior → obsolete** |
+| Oct 5 | Final evidence package with one-take video PoC, 11 attachments, CF edge logs (comment #10) |
+| Oct 7 | Hard closure: Won't Fix. Formal CoC warning; "AI output" accusation; ban threat; "we won't see any further replies on this case" (comment #11) |
+| Oct 12 | Formal public-disclosure request, founded on Google's own determination — filed on this report and its sibling alike |
+| Oct 14 | Google answers procedurally: disclosure decision is mine, date at my discretion, "keep us up to date with your disclosure timeline" — no fix engagement offered |
+| Oct 14 | Formal publication notice given in-channel: publication October 23 |
+| Oct 21 | Publication document shared with the vendor in-channel, with the publication window |
+| Oct 22 | Vendor acknowledges receipt of the publication document; no objection raised, no fix engagement offered |
+| Oct 23–26 | This write-up published within the noticed window |
+
+Four incompatible rationales for one report — not reproducible, unclear, intended behavior, obsolete — form a pattern no consistent triage policy can produce (two further dismissive framings, "user attacking themselves" and "AI-generated evidence", appeared across the correspondence). The pattern is itself data. A fifth signal arrived on Oct 14: the same program that declared on Oct 7 that "we won't see any further replies on this case" answered the disclosure request with an assurance that it does respond to updates and a request to be informed of my plans.
+
+## 2. The finding (conceptual, deliberately non-operational)
+
+The attack class: **attacker-authored content that the agent ingests as data becomes the agent's instructions** — the classic indirect-injection premise — but weaponized end-to-end against Google's production agentic surface, where the Gemini agent holds real file-system reach, mail/search tools, and server-side URL fetchers. Within the victim's session this agent is not a text renderer; it is a privileged executor holding the user's own read, write, and network-fetch permissions — and everything below was performed with those permissions, not around them. No traditional perimeter sees any of it, because none of it is anomalous: the execution is internal, the tools are legitimate, and the egress belongs to the platform itself.
+
+1. A victim opens one ordinary-looking document in Drive (shared, collaborative, or a template) and asks Gemini to work on their files.
+2. Embedded instructions steer the agent: benign-looking branding/procedure language in the front, operational payload in layers the filters do not read.
+3. The agent scans the reachable workspace, matches secret-shaped values (API-key formats of Google/AWS/Stripe), and emits them inside resource URLs.
+4. Google's own document-conversion and fetch infrastructure performs the network egress server-side — the request leaves from Google IP space, with Google user-agents.
+5. The agent signs its work: session identifiers, file fingerprints, and step-by-step attestations in its own execution records, tying the run to platform artifacts the reviewer can look up.
+
+No payload specifics, exact prompts, bypass mechanics, or collector endpoints are published. Full technical detail was provided to Google in-reports and is available to coordinators under embargo.
+
+## 3. The evidence chain (four independent layers, one conclusion)
+
+- **Layer 1 — receiver rows with inline edge signatures:** every strike record embeds the Cloudflare ray ID, the true source IP, the user-agent, and millisecond timestamp of the original fetch. Master strike: ray `a457dd77884e1d68`, source `66.249.88.198` (Google ASN 15169), UA `Mozilla/5.0 (compatible; GoogleDocs; +Google-Document-Conversion)`, `2026-10-04T23:11:20.287Z`, path carrying all five secret-shaped canaries (values redacted: `AIzaSy…`, `AKIA…`, `sk_live…`, a 39-character token, an ownership stamp).
+- **Layer 2 — Cloudflare edge analytics:** independent GraphQL pull of the zone's stored edge records confirms the same minute, IP, and path, plus a same-day trio of fetchers (`66.249.88.193/.198/.199`).
+- **Layer 3 — full edge log JSON** for the same ray, filed to Google as an attachment (comment #10).
+- **Layer 4 — one-take video PoC** of the live chain, plus the agent's own execution records and the session transcript of the Gemini 3.1 Pro run (session `c50bc1c30bbed0c0`) anchoring every on-screen step to platform artifacts a reviewer can look up ("The row, the four file IDs and the session ID each answer a question in a single lookup").
+
+75 relayed strike hits from 29 distinct Google-estate source IPs were recorded in a single collection bin between September 30 and October 11 alone, and fetcher traffic from the same Google estate was still arriving as late as October 11 — four days after the final closure.
+
+## 4. What the agents did (behavioral inventory)
+
+Intent-filter bypass before textual refusal; workspace scanning across files (the model itself stated the technique generalizes to any connected source, Gmail included); planting of a weaponized artifact into the user's own Drive; secret-pattern harvesting with values embedded in outbound URLs; server-side egress through Google fetchers; agent-signed execution logs attesting each step. In the honest interest of completeness, three qualifiers from the record itself: the account held two files and both were scanned, so the sweep ceiling was not tested; a chat halt did occur — after the data had already left; and the product's own warning banner appeared on an August run whose payload shipped and executed anyway. Controls that announce and proceed are part of the finding, not a mitigation of it.
+
+## 5. Why "Intended Behavior" fails its own test
+
+Google's closing rationale on the sibling report states that a prompt injection qualifies as a security vulnerability when it is *"indirect (originating from an external source and inserted into LLM context without the victim's involvement)"* and produces *"tangible security impact, such as unauthorized data exfiltration."* The reported class satisfies both clauses in Google's own words: a poisoned document authored by a third party is an external source; a Workspace user who opens a trending doc or a shared template contributes no malicious content; and secret-shaped values leaving through Google's own egress is unauthorized exfiltration by their own definition. The rebuttal that the researcher "attacked himself" mistakes the demonstration for the threat model: every test was own-account by ethical necessity; the class requires no attacker account at all.
+
+Two structural explanations, one documented: triage instrumentation is structurally blind to server-side passive fetches (agent execution logs do not record them), so reviewers genuinely see "nothing happened"; and architectural remediation is expensive, which creates institutional pressure to classify the behavior as intended. The first is captured evidence; the second is inference, offered as inference.
+
+## 6. Impact
+
+Google markets Workspace and its agents under SOC2 / ISO27001 / GDPR-art.32-aligned security postures to hundreds of millions of business users (user-count inference from Google's published figures). One trending poisoned document is sufficient to operate this class at scale against corporate secrets. No third party's data was ever touched in this research.
+
+## 7. What should be done (architectural, vendor-side)
+
+Treat agent-ingested third-party content as untrusted input at the tool-use boundary, not only at the prompt boundary. Separate the classification of "user instruction" from "retrieved content" in tool-permission decisions. Make server-side fetches of agent-generated URLs visible in execution logs and governed by destination policy. Sign and log agent-initiated egress with the same rigor as human-initiated exports. These are design obligations, not patches.
+
+## 8. Publication ethics
+
+No payloads or copycat mechanics; synthetic canary values only; own-accounts-only testing, stated plainly; the demonstration/class distinction maintained throughout; coordination attempts documented in §1; full evidence available to Google in-report, and the chain was filed with CERT/CC (VRF#26-10-TBGJX), which declined coordination the same day and recommended working directly with the vendor — engagement that had already been under way for 52 days. Published under the VRP Code of Conduct's own disclosure terms, which reserve the timing decision to the researcher and ask only reasonable advance notice — notice which a "no fix exists" determination renders unanswerable in its own terms.
+
+This publication also follows Google's own published coordinated-disclosure stance (about.google/company-info/appsecurity/): *"We believe that vulnerability disclosure is a two-way street. Vendors, as well as researchers, must act responsibly."*; *"Google expects to be held to the same standard."*; and its open invitation — *"We call on all researchers to adopt disclosure deadlines in some form, and feel free to use our policy verbatim if you find our record and reasoning compelling."* A deadline was adopted, declared, and notice given; a vendor that publishes others' vulnerabilities after 90 days regardless of fixes has authored the standard being applied here.
